@@ -30,8 +30,9 @@ declare global {
 	export function $range(startIndex: number, finishIndex: number, step?: number): Iterable<number>;
 }
 
-const ONLY_ECMA_SCRIPT_REGEX = /\.(ts|tsx|js|jsx)$/;
-const FOR_LOOP_REGEX = /for\s*\(\s*const\s+([a-zA-Z0-9_]+)\s+of\s+\$range\s*\(([^,]+),([^,)]+)(?:,\s*([^)]+))?\)\)/g;
+const ECMA_SCRIPT_FILE_REGEX = /\.(ts|tsx|js|jsx)$/;
+const FOR_RANGE_MACRO_REGEX =
+	/for\s*\(\s*const\s+([a-zA-Z0-9_$]+)\s+of\s+\$range\s*\(\s*([^,]+)\s*,\s*([^,)]+)(?:\s*,\s*([^)]+))?\s*\)\s*\)/g;
 
 /**
  * What this plugin does is quite simple. It parses over TypeScript source code
@@ -56,13 +57,13 @@ const FOR_LOOP_REGEX = /for\s*\(\s*const\s+([a-zA-Z0-9_]+)\s+of\s+\$range\s*\(([
 const rangeMacroPlugin: Bun.BunPlugin = {
 	name: "$range macro plugin",
 	setup(build: Bun.PluginBuilder): void {
-		build.onLoad({ filter: ONLY_ECMA_SCRIPT_REGEX }, async ({ loader, path }): Promise<Bun.OnLoadResult> => {
+		build.onLoad({ filter: ECMA_SCRIPT_FILE_REGEX }, async ({ loader, path }): Promise<Bun.OnLoadResult> => {
 			const code = await Bun.file(path).text();
 			const contents = code.replace(
-				FOR_LOOP_REGEX,
+				FOR_RANGE_MACRO_REGEX,
 				// eslint-disable-next-line better-max-params/better-max-params -- useless error
 				(_: string, variableName: string, start: string, finish: string, step?: string): string => {
-					const increment = step ? step.trim() : "1";
+					const increment = step?.trim() ?? "1";
 					if (increment === "0") throw new TypeError(`$range macro step cannot be zero in ${path}`);
 
 					const startIndex = start.trim();

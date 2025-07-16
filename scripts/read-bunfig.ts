@@ -1,15 +1,22 @@
 /* eslint-disable max-depth -- annoying */
 /* eslint-disable max-lines-per-function -- worthless in this context */
 
+const QUOTED_STRING_REGEX = /^(['"])(.*)\1$/;
+const BOOLEAN_REGEX = /^(?:true|false)$/;
+const INTEGER_REGEX = /^[+-]?\d+$/;
+const FLOAT_REGEX = /^[+-]?\d+\.\d+$/;
+
 function trim(value: string): string {
 	return value.trim();
 }
 function filterEmpty(value: string): boolean {
 	return value.length > 0;
 }
-
 function isQuoted(value: string): boolean {
-	return (value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"));
+	return QUOTED_STRING_REGEX.test(value);
+}
+function parseNumber(value: string): number {
+	return INTEGER_REGEX.test(value) ? Number.parseInt(value, 10) : Number.parseFloat(value);
 }
 
 /**
@@ -366,14 +373,18 @@ export interface RunConfiguration {
 	silent?: boolean;
 }
 
-function parseToml(content: string): Record<string, any> {
-	const result: Record<string, any> = {};
-	let current: Record<string, any> = result;
+function parseToml(content: string): Record<string, unknown> {
+	const result: Record<string, unknown> = {};
+	let current: Record<string, unknown> = result;
 	const lines = content.split(/\r?\n/);
 
-	for (const [index, raw] of lines.entries()) {
+	let index = 0;
+	for (const raw of lines) {
 		const line = raw.trim();
-		if (!line || line.startsWith("#")) continue;
+		if (!line || line.startsWith("#")) {
+			index += 1;
+			continue;
+		}
 
 		if (line.startsWith("[") && line.endsWith("]")) {
 			const headerName = line.slice(1, -1).trim();
@@ -383,8 +394,9 @@ function parseToml(content: string): Record<string, any> {
 			current = result;
 			for (const part of parts) {
 				if (!current[part] || typeof current[part] !== "object") current[part] = {};
-				current = current[part];
+				current = current[part] as Record<string, unknown>;
 			}
+			index += 1;
 			continue;
 		}
 
@@ -402,12 +414,11 @@ function parseToml(content: string): Record<string, any> {
 
 		let value: unknown;
 		if (isQuoted(rawValue)) value = rawValue.slice(1, -1);
-		else if (/^(true|false)$/.test(rawValue)) value = rawValue === "true";
-		else if (/^[+-]?\d+$/.test(rawValue)) value = Number.parseInt(rawValue, 10);
-		else if (/^[+-]?\d+\.\d+$/.test(rawValue)) value = Number.parseFloat(rawValue);
+		else if (BOOLEAN_REGEX.test(rawValue)) value = rawValue === "true";
+		else if (INTEGER_REGEX.test(rawValue) || FLOAT_REGEX.test(rawValue)) value = parseNumber(rawValue);
 		else if (rawValue.startsWith("{") && rawValue.endsWith("}")) {
 			const inner = rawValue.slice(1, -1).trim();
-			const internalObject: Record<string, any> = {};
+			const internalObject: Record<string, unknown> = {};
 			if (inner) {
 				const entries = inner.split(",").map(trim).filter(filterEmpty);
 				for (const entry of entries) {
@@ -420,16 +431,15 @@ function parseToml(content: string): Record<string, any> {
 
 					const valueRaw = entry.slice(equalIndex + 1).trim();
 					if (isQuoted(valueRaw)) internalObject[key] = valueRaw.slice(1, -1);
-					else if (/^(true|false)$/.test(valueRaw)) internalObject[key] = valueRaw === "true";
-					else if (/^[+-]?\d+$/.test(valueRaw)) internalObject[key] = Number.parseInt(valueRaw, 10);
-					else if (/^[+-]?\d+\.\d+$/.test(valueRaw)) internalObject[key] = Number.parseFloat(valueRaw);
+					else if (BOOLEAN_REGEX.test(valueRaw)) internalObject[key] = valueRaw === "true";
+					else if (INTEGER_REGEX.test(valueRaw) || FLOAT_REGEX.test(valueRaw))
+						internalObject[key] = parseNumber(valueRaw);
 					else if (valueRaw.startsWith("[") && valueRaw.endsWith("]")) {
 						const arrayItems = valueRaw.slice(1, -1).split(",").map(trim).filter(filterEmpty);
-						internalObject[key] = arrayItems.map((item) => {
+						internalObject[key] = arrayItems.map((item: string) => {
 							if (isQuoted(item)) return item.slice(1, -1);
-							if (/^(true|false)$/.test(item)) return item === "true";
-							if (/^[+-]?\d+$/.test(item)) return Number.parseInt(item, 10);
-							if (/^[+-]?\d+\.\d+$/.test(item)) return Number.parseFloat(item);
+							if (BOOLEAN_REGEX.test(item)) return item === "true";
+							if (INTEGER_REGEX.test(item) || FLOAT_REGEX.test(item)) return parseNumber(item);
 							throw new Error(`Invalid array item '${item}' in inline table at line ${index + 1}`);
 						});
 					} else throw new Error(`Unsupported inline table value '${valueRaw}' at line ${index + 1}`);
@@ -438,11 +448,10 @@ function parseToml(content: string): Record<string, any> {
 			value = internalObject;
 		} else if (rawValue.startsWith("[") && rawValue.endsWith("]")) {
 			const items = rawValue.slice(1, -1).split(",").map(trim).filter(filterEmpty);
-			value = items.map((item) => {
+			value = items.map((item: string) => {
 				if (isQuoted(item)) return item.slice(1, -1);
-				if (/^(true|false)$/.test(item)) return item === "true";
-				if (/^[+-]?\d+$/.test(item)) return Number.parseInt(item, 10);
-				if (/^[+-]?\d+\.\d+$/.test(item)) return Number.parseFloat(item);
+				if (BOOLEAN_REGEX.test(item)) return item === "true";
+				if (INTEGER_REGEX.test(item) || FLOAT_REGEX.test(item)) return parseNumber(item);
 				throw new Error(`Invalid array item '${item}' at line ${index + 1}`);
 			});
 		} else throw new Error(`Unsupported value '${rawValue}' at line ${index + 1}`);
@@ -452,10 +461,12 @@ function parseToml(content: string): Record<string, any> {
 			const part = keyParts[jndex];
 			if (!part) continue;
 			if (!target[part] || typeof target[part] !== "object") target[part] = {};
-			target = target[part];
+			target = target[part] as Record<string, unknown>;
 		}
 
-		target[keyParts[keyParts.length - 1]!] = value;
+		const lastKey = keyParts[keyParts.length - 1];
+		if (lastKey) target[lastKey] = value;
+		index += 1;
 	}
 
 	return result;
@@ -507,7 +518,6 @@ interface TableEntry {
 	readonly key: string;
 	readonly value: object;
 }
-
 function isNested([, value]: [string, unknown]): boolean {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -535,7 +545,7 @@ export function serializeToml(object: object, parentKey = ""): string {
 			if (!hasNested) {
 				const inner = entries
 					.map(
-						([internalKey, internalValue]) =>
+						([internalKey, internalValue]): string =>
 							`${serializeValue(internalKey)} = ${serializeValue(internalValue)}`,
 					)
 					.join(", ");
