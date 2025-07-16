@@ -1,0 +1,19 @@
+{
+	"Error Class": {
+		"body": [
+			"export default class ${TM_FILENAME_BASE/(.*)/${1:/pascalcase}/g} extends Error {",
+			"\tpublic constructor(message: string) {",
+			"\t\tsuper(message);",
+			"\t\tthis.name = \"${TM_FILENAME_BASE/(.*)/${1:/pascalcase}/g}\";",
+			"\t\tObject.setPrototypeOf(this, ${TM_FILENAME_BASE/(.*)/${1:/pascalcase}/g}.prototype);",
+			"\t\tError.captureStackTrace(this, ${TM_FILENAME_BASE/(.*)/${1:/pascalcase}/g});",
+			"\t}",
+			"}",
+			"",
+		],
+		"description": "Creates a new custom error class.",
+		"isFileTemplate": true,
+		"prefix": ["errorclass"],
+		"scope": "typescript,typescriptreact",
+	},
+}

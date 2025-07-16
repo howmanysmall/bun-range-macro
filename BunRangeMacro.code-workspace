@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"name": "Bun Range Macro",
+			"path": ".",
+		},
+	],
+
+	"settings": {
+		"files.defaultLanguage": "typescript",
+		"typescript.inlayHints.enumMemberValues.enabled": true,
+		"typescript.inlayHints.parameterNames.enabled": "literals",
+	},
+}

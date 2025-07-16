@@ -1,0 +1,8 @@
+define = { "$range" = "$range" }
+entry = "src/index.ts"
+
+[install]
+auto = "auto"
+
+[run]
+bun = true

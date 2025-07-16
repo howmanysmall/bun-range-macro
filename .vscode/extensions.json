@@ -1,0 +1,10 @@
+{
+	"recommendations": [
+		"biomejs.biome",
+		"fill-labs.dependi",
+		"mikestead.dotenv",
+		"oven.bun-vscode",
+		"tamasfe.even-better-toml",
+		"usernamehw.errorlens",
+	],
+}
