@@ -1,35 +1,10 @@
 #!/usr/bin/env bun
 
-import { mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-import { readBunConfigurationAsync, serializeToml } from "./read-bunfig";
+import { type BunConfiguration, readBunConfigurationAsync, serializeToml } from "./read-bunfig";
 
 type FileContents = ArrayBuffer | Bun.ArrayBufferView | Bun.BunFile | Request | Response | SharedArrayBuffer | string;
-
-async function isDirectoryAsync(path: string): Promise<boolean> {
-	try {
-		const stats = await stat(path);
-		return stats.isDirectory();
-	} catch {
-		return false;
-	}
-}
-
-async function makeDirectoryAsync(path: string): Promise<void> {
-	const exists = await isDirectoryAsync(path);
-	if (!exists) await mkdir(path, { recursive: true });
-}
-
-async function readJsonAsync<T>(path: string, validate: (contents: unknown) => contents is T): Promise<T> {
-	const file = Bun.file(path);
-	const exists = await file.exists();
-	if (!exists) throw new Error(`File not found: ${path}`);
-
-	const contents = await file.json();
-	if (!validate(contents)) throw new Error(`Invalid JSON structure in ${path}`);
-	return contents;
-}
 
 async function writeFileAsync(path: string, fileContents: FileContents): Promise<void> {
 	await Bun.file(path).write(fileContents);
@@ -50,18 +25,32 @@ function removeDuplicates<T extends NonNullable<unknown>>(array: Array<T>): Arra
 }
 
 const CWD = process.cwd();
+const CWD_PREFIX = new RegExp(`^${CWD}/`);
 
 const RANGE_PLUGIN_PATH = join(CWD, "plugins", "bun", "range-plugin.ts");
-const TSCONFIG_FILE_PATH = join(CWD, "tsconfig.json");
+
+function stripCwd(value: string): string {
+	return value.replace(CWD_PREFIX, "");
+}
 
 async function createPluginAsync(): Promise<void> {
 	await writeFileAsync(
 		RANGE_PLUGIN_PATH,
 		`import rangeMacroPlugin from "bun-range-macro";
 
-await Bun.plugin(rangeMacroPlugin);`,
+await Bun.plugin(rangeMacroPlugin);
+`,
 	);
+
+	console.log(`Created plugin at ${stripCwd(RANGE_PLUGIN_PATH)}`);
 }
+
+function getPreload(preload: Array<string> | string): Array<string> {
+	if (typeof preload === "string") return removeDuplicates([preload, stripCwd(RANGE_PLUGIN_PATH)]);
+	if (Array.isArray(preload)) return removeDuplicates([...preload, stripCwd(RANGE_PLUGIN_PATH)]);
+	throw new Error(`Unexpected type for preload: ${typeof preload}`);
+}
+
 async function setupConfigurationAsync(): Promise<void> {
 	const path = join(CWD, "bunfig.toml");
 	const file = Bun.file(path);
@@ -73,16 +62,23 @@ async function setupConfigurationAsync(): Promise<void> {
 			$range: "$range",
 		};
 
-		const preload = configuration.preload ?? [];
-
-		if (preload) {
-			if (typeof preload === "string") configuration.preload = removeDuplicates([preload, RANGE_PLUGIN_PATH]);
-			else if (Array.isArray(preload)) configuration.preload = removeDuplicates([...preload, RANGE_PLUGIN_PATH]);
-			else throw new Error(`Unexpected type for preload: ${typeof preload}`);
-		} else configuration.preload = [RANGE_PLUGIN_PATH];
+		configuration.preload = getPreload(configuration.preload ?? []);
+		configuration.test = {
+			...configuration.test,
+			preload: getPreload(configuration.test?.preload ?? []),
+		};
 
 		await file.write(serializeToml(configuration));
+	} else {
+		const configuration: BunConfiguration = {
+			define: { $range: "$range" },
+			preload: getPreload([]),
+			test: { preload: getPreload([]) },
+		};
+		await file.write(serializeToml(configuration));
 	}
+
+	console.log(`Updated bunfig.toml at ${stripCwd(path)}`);
 }
 
 await createPluginAsync();

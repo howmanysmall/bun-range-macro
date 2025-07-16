@@ -1,3 +1,4 @@
+/* eslint-disable max-depth -- annoying */
 /* eslint-disable max-lines-per-function -- worthless in this context */
 
 function trim(value: string): string {
@@ -5,6 +6,10 @@ function trim(value: string): string {
 }
 function filterEmpty(value: string): boolean {
 	return value.length > 0;
+}
+
+function isQuoted(value: string): boolean {
+	return (value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"));
 }
 
 /**
@@ -396,19 +401,45 @@ function parseToml(content: string): Record<string, any> {
 		}
 
 		let value: unknown;
-		if (
-			(rawValue.startsWith('"') && rawValue.endsWith('"')) ||
-			(rawValue.startsWith("'") && rawValue.endsWith("'"))
-		)
-			value = rawValue.slice(1, -1);
+		if (isQuoted(rawValue)) value = rawValue.slice(1, -1);
 		else if (/^(true|false)$/.test(rawValue)) value = rawValue === "true";
 		else if (/^[+-]?\d+$/.test(rawValue)) value = Number.parseInt(rawValue, 10);
 		else if (/^[+-]?\d+\.\d+$/.test(rawValue)) value = Number.parseFloat(rawValue);
-		else if (rawValue.startsWith("[") && rawValue.endsWith("]")) {
+		else if (rawValue.startsWith("{") && rawValue.endsWith("}")) {
+			const inner = rawValue.slice(1, -1).trim();
+			const internalObject: Record<string, any> = {};
+			if (inner) {
+				const entries = inner.split(",").map(trim).filter(filterEmpty);
+				for (const entry of entries) {
+					const equalIndex = entry.indexOf("=");
+					if (equalIndex === -1)
+						throw new Error(`Invalid inline table entry '${entry}' at line ${index + 1}`);
+
+					let key = entry.slice(0, equalIndex).trim();
+					if (isQuoted(key)) key = key.slice(1, -1);
+
+					const valueRaw = entry.slice(equalIndex + 1).trim();
+					if (isQuoted(valueRaw)) internalObject[key] = valueRaw.slice(1, -1);
+					else if (/^(true|false)$/.test(valueRaw)) internalObject[key] = valueRaw === "true";
+					else if (/^[+-]?\d+$/.test(valueRaw)) internalObject[key] = Number.parseInt(valueRaw, 10);
+					else if (/^[+-]?\d+\.\d+$/.test(valueRaw)) internalObject[key] = Number.parseFloat(valueRaw);
+					else if (valueRaw.startsWith("[") && valueRaw.endsWith("]")) {
+						const arrayItems = valueRaw.slice(1, -1).split(",").map(trim).filter(filterEmpty);
+						internalObject[key] = arrayItems.map((item) => {
+							if (isQuoted(item)) return item.slice(1, -1);
+							if (/^(true|false)$/.test(item)) return item === "true";
+							if (/^[+-]?\d+$/.test(item)) return Number.parseInt(item, 10);
+							if (/^[+-]?\d+\.\d+$/.test(item)) return Number.parseFloat(item);
+							throw new Error(`Invalid array item '${item}' in inline table at line ${index + 1}`);
+						});
+					} else throw new Error(`Unsupported inline table value '${valueRaw}' at line ${index + 1}`);
+				}
+			}
+			value = internalObject;
+		} else if (rawValue.startsWith("[") && rawValue.endsWith("]")) {
 			const items = rawValue.slice(1, -1).split(",").map(trim).filter(filterEmpty);
 			value = items.map((item) => {
-				if ((item.startsWith('"') && item.endsWith('"')) || (item.startsWith("'") && item.endsWith("'")))
-					return item.slice(1, -1);
+				if (isQuoted(item)) return item.slice(1, -1);
 				if (/^(true|false)$/.test(item)) return item === "true";
 				if (/^[+-]?\d+$/.test(item)) return Number.parseInt(item, 10);
 				if (/^[+-]?\d+\.\d+$/.test(item)) return Number.parseFloat(item);
@@ -477,6 +508,10 @@ interface TableEntry {
 	readonly value: object;
 }
 
+function isNested([, value]: [string, unknown]): boolean {
+	return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 /**
  * Recursively serialize a JS object into a TOML string.
  *
@@ -493,9 +528,20 @@ export function serializeToml(object: object, parentKey = ""): string {
 
 	for (const [key, value] of Object.entries(object)) {
 		const fullKey = parentKey ? `${parentKey}.${key}` : key;
-		if (value !== null && typeof value === "object" && !Array.isArray(value))
-			tables[tablesLength++] = { key: fullKey, value };
-		else lines[linesLength++] = `${key} = ${serializeValue(value)}`;
+		if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+			// Inline simple objects as TOML inline tables if they contain no nested objects
+			const entries = Object.entries(value);
+			const hasNested = entries.some(isNested);
+			if (!hasNested) {
+				const inner = entries
+					.map(
+						([internalKey, internalValue]) =>
+							`${serializeValue(internalKey)} = ${serializeValue(internalValue)}`,
+					)
+					.join(", ");
+				lines[linesLength++] = `${key} = { ${inner} }`;
+			} else tables[tablesLength++] = { key: fullKey, value };
+		} else lines[linesLength++] = `${key} = ${serializeValue(value)}`;
 	}
 
 	let result = lines.join("\n");
