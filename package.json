@@ -2,7 +2,7 @@
 	"name": "bun-range-macro",
 	"module": "src/index.ts",
 	"type": "module",
-	"version": "0.0.1-alpha.0",
+	"version": "1.0.0",
 	"description": "Adds a $range macro for Bun to use in your code.",
 	"homepage": "https://github.com/howmanysmall/bun-range-macro#readme",
 	"bugs": {
