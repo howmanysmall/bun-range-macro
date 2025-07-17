@@ -28,13 +28,13 @@ download any files.
 ### Unix/macOS (Bash)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/howmanysmall/bun-range-macro/main/installer/install.sh | bash
+curl -fsSL "https://raw.githubusercontent.com/howmanysmall/bun-range-macro/main/installer/install.sh?$(date +%s)" | bash
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/howmanysmall/bun-range-macro/main/installer/install.ps1 | pwsh
+irm ("https://raw.githubusercontent.com/howmanysmall/bun-range-macro/main/installer/install.ps1?{0}" -f [int][double]::Parse((Get-Date -UFormat %s))) | pwsh
 ```
 
 Both scripts will:
