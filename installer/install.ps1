@@ -16,7 +16,7 @@ $cleanup = {
 Register-EngineEvent PowerShell.Exiting -Action $cleanup | Out-Null
 
 bun add bun-range-macro
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/howmanysmall/bun-range-macro/refs/heads/main/scripts/setup-plugin-combined.ts" -OutFile $ScriptName -UseBasicParsing
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/howmanysmall/bun-range-macro/refs/heads/main/scripts/setup-plugin.ts" -OutFile $ScriptName -UseBasicParsing
 bun run $ScriptName
 
 if (Test-Path $ScriptName) {

@@ -14,6 +14,6 @@ trap 'rm -f "$SCRIPT_NAME"' EXIT
 
 bun add bun-range-macro
 
-curl -s -o $SCRIPT_NAME -L "https://raw.githubusercontent.com/howmanysmall/bun-range-macro/refs/heads/main/scripts/setup-plugin-combined.ts"
+curl -s -o $SCRIPT_NAME -L "https://raw.githubusercontent.com/howmanysmall/bun-range-macro/refs/heads/main/scripts/setup-plugin.ts"
 bun run $SCRIPT_NAME
 rm $SCRIPT_NAME
